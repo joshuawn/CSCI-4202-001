@@ -1,4 +1,4 @@
-file_name,labeled_class,predicted_class,prediction_confidence,image_url
+file_name,labeled_class,predicted_class,prediction_confidence,image_url,null
 training_01-whole_0710.jpg,None,beach wagon,0.27387741208076477,https://lh3.googleusercontent.com/dsX33HLj6NASUksw1kkDg0KqvullO3nuPQrKwHj2lzHAdeFXHmXcbf81NLexumyOjxeCMK1buKrFBNRV9TkcHEB42Zr27w,
 training_01-whole_0720.jpg,None,sports car,0.8236920833587646,https://lh3.googleusercontent.com/5keQXyZDtfs6E2aargz2Kxnq9oouvZbHTP0M_lFlOZcGpQPh6ZESrAPaz6sjFZp-4-lw2qyDuVfZJz6_wYE435fSikvzZNE,
 training_01-whole_0217.jpg,None,sports car,0.5304958820343018,https://lh3.googleusercontent.com/pkA-BtS1qNXA1_PNE2q2VAOWL9odxbqZV63OrwAAIQNM7Dy2PbJkwNNoaCW0v5xFE3Uv3vu34JYDMO_2XB3E3TX-Pdcl1w,
