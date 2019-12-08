@@ -1,0 +1,1 @@
+{"region":{"Type":{"type":"dropdown","description":"","options":{"car":"Car","scratch":"Scratch","dent":"Dent","crack":"Cracked Glass","bumper":"Detached Piece"},"default_options":{"car":true}}},"file":{}}
