@@ -37,9 +37,8 @@ class CarDamageDataset(torch.utils.data.Dataset):
     def __getitem__(self, idx):
         # load images and masks
         img_path = self.imgs[idx]
-        #print(img_path)
         mask_path = self.masks[idx]
-        #print(mask_path)
+
         img = Image.open(img_path).convert("RGB")
         # note that we haven't converted the mask to RGB,
         # because each color corresponds to a different instance
@@ -65,7 +64,6 @@ class CarDamageDataset(torch.utils.data.Dataset):
             xmax = np.max(pos[1])
             ymin = np.min(pos[0])
             ymax = np.max(pos[0])
-            #print([xmin, ymin, xmax, ymax])
             # If xmin >= xmax or ymin >= ymax, 
             #   the box is invalid as there is technically no area & the mask attempts to be skipped
             # This should not happen with a properly pre-parsed dataset.
@@ -96,7 +94,6 @@ class CarDamageDataset(torch.utils.data.Dataset):
         return img, target
 
     def __len__(self):
-        #print("This is the length:" + str(len(self.imgs)))
         return len(self.imgs)
 
 def get_instance_segmentation_model(num_classes):
@@ -138,6 +135,8 @@ parser_train.add_argument("json_path", type=str, help="Path to VGG JSON-formatte
 parser_train.add_argument("root_folder", type=str, help="Path to root folder containing the images folder (and masks folder if it exists) -- must have trailing slash")
 parser_train.add_argument("image_folder_name", type=str, help="Name of folder containing the images referenced in JSON (currently, all images must be in the same folder)")
 parser_train.add_argument("save_path", type=str, help="Path where weights of model are saved")
+parser_train.add_argument("num_epochs", type=int, help="Number of epochs used to train the model.")
+parser_train.add_argument("validation_ratio", type=float, help="Fractional ratio used to determine subset of data reserved for validation on training")
 
 parser_load = subparsers.add_parser('load', help="loads desired weights for a pretrained model & applies a mask to an input image \
                                     Requires checkpoint_path and image_path")
@@ -159,6 +158,12 @@ if (mode == "train"):
     
     save_path = args.save_path
     print("Path to save the trained model: " + save_path)
+    
+    num_epochs = int(args.num_epochs)
+    print("Number of epochs: " + str(num_epochs))
+    
+    validation_ratio = float(args.validation_ratio)
+    print("Validation ratio: " + str(validation_ratio))
     
     if not os.path.exists(root_folder+"masks/"):
         try:
@@ -192,7 +197,6 @@ if (mode == "train"):
                     data = json.load(f)
                 except:
                     raise Exception("Unable to load JSON")
-                #print(data)
                 metadata_dict = data["_via_img_metadata"]
                 # Each value is a subdictionary containing metadata for a specific image            
                 for key, value in metadata_dict.items():
@@ -228,16 +232,12 @@ if (mode == "train"):
         filename_with_extension = image_data[0]
         # Regex to remove extension
         filename_without_extension = re.sub('((\.jpg$)|(\.JPEG$))', '', filename_with_extension)
-        #print(filename_with_extension)
-        #print(filename_without_extension)
         polygon_data = parsed_mask_polygon_dict[filename_with_extension]
-        #print(polygon_data)
         # Each element is a list containing [region name, [xi, yi]]
         polygon_coords_xy = []
         for polygon in polygon_data:
             polygon_name = polygon[0]
             polygon_x = polygon[1]
-            #print(polygon_name)
             polygon_y = polygon[2]
             min_x = min(polygon_x)
             max_x = max(polygon_x)
@@ -264,26 +264,34 @@ if (mode == "train"):
             validated_mask_img_list.append(mask_image_save_location)
             validated_img_list.append(image_data)
     
-    # From research into other implementations, there is a common standard to reserve ~10% of the dataset for validation.
-    # We're interested in the results with different divisions of testing vs. validation
     dataset = CarDamageDataset(root_folder, list(np.array(validated_img_list)[:,1]), validated_mask_img_list, transforms=get_transform(train=True))
     dataset_test = CarDamageDataset(root_folder, list(np.array(validated_img_list)[:,1]), validated_mask_img_list, transforms=get_transform(train=False))
     
     print("Total amount of data in dataset: " + str(len(dataset)))
     
     # split the dataset in train and test set
+    # From research into other implementations, there is a common standard to reserve ~10% of the dataset for validation.
+    # We're interested in the effects of higher validation ratios & a more random distribution of data on the dataset
+    if (validation_ratio > 0.9):
+        validation_ratio = 0.9
+    elif (validation_ratio < 0.1):
+        validation_ratio = 0.1
     torch.manual_seed(1)
-    indices = torch.randperm(len(dataset)).tolist()
-    number_of_indices_reserved_for_validation = math.floor(len(dataset)*0.5)
+    indices = torch.randperm(len(dataset)).tolist() # Creates a random permutation over all the elements in the dataset
+    number_of_indices_reserved_for_validation = math.floor(len(dataset)*validation_ratio)
     
+    # Assigns the bottom portion of randomly selected elements
     dataset = torch.utils.data.Subset(dataset, indices[:-number_of_indices_reserved_for_validation])
     print("Amount of data in training dataset: " + str(len(dataset)))
+    # Assigns the remaining top portion of randomly selected elements
     dataset_test = torch.utils.data.Subset(dataset_test, indices[-number_of_indices_reserved_for_validation:])
     print("Amount of data in validation dataset: " + str(len(dataset_test)))
     
     # define training and validation data loaders
+    # NOTE: On Windows, num_workers must be set to 0 due to improperly implemented enumeration of available hardware
+    # Regardless, this attempts to use every virtual core available when device = CPU & every CUDA core when device = GPU
     data_loader = torch.utils.data.DataLoader(
-        dataset, batch_size=2, shuffle=False, num_workers=0,
+        dataset, batch_size=2, shuffle=True, num_workers=0,
         collate_fn=utils.collate_fn)
     
     data_loader_test = torch.utils.data.DataLoader(
@@ -291,7 +299,6 @@ if (mode == "train"):
         collate_fn=utils.collate_fn)
     
     device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
-    #device = torch.device('cpu')
     
     # our dataset has two classes only - background and car damage
     num_classes = 2
@@ -312,9 +319,8 @@ if (mode == "train"):
                                                    step_size=3,
                                                    gamma=0.1)
     
-    # let's train it for 10 epochs
-    num_epochs = 10
-    
+    if (num_epochs < 1):
+        num_epochs = 1    
     for epoch in range(num_epochs):
         # train for one epoch, printing every 10 iterations
         train_one_epoch(model, optimizer, data_loader, device, epoch, print_freq=10)
@@ -367,7 +373,8 @@ elif (mode == "load"):
         rescaled_img = Image.fromarray(rescaled_img_array).convert("RGB")
         
         # NOTE: Banding will occur by process of converting floating point values into bytes (clamped to 255)
-        # Future implementation would benefit from conserving precision of segmentation mask values, which would correspond to a more precise image composition
+        # Future implementation would benefit from conserving precision of segmentation mask values, 
+        # which would correspond to a more precise image composition
         segmentation_mask_array = prediction[0]['masks'][0, 0].mul(255).byte().cpu().numpy()
 
         random.seed()
@@ -391,7 +398,12 @@ elif (mode == "load"):
         optimal_font_scale = rescaled_img.size[0] / base_font_legibility_img_width
         
         font = ImageFont.truetype("arial.ttf", math.ceil(15*optimal_font_scale))
-        text = "DAMAGE -- max conf:\n" + str(segmentation_mask_array[max_x][max_y]/255.0)
+        max_conf = segmentation_mask_array[max_x][max_y]/255.0
+        text = None
+        if (max_conf == 0):
+            text = "No damage found"
+        else:
+            text = "DAMAGE -- max conf:\n" + str(max_conf)
         
         draw_coords = (10, 10)
         
