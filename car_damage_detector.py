@@ -370,8 +370,7 @@ elif (mode == "load"):
         # Future implementation would benefit from conserving precision of segmentation mask values, which would correspond to a more precise image composition
         segmentation_mask_array = prediction[0]['masks'][0, 0].mul(255).byte().cpu().numpy()
 
-        # Consistent random seed for replicability
-        random.seed(1)
+        random.seed()
         # Generates a random color for a given mask
         mask_color = Image.new('RGB', rescaled_img.size, (random.randint(0, 255), random.randint(0, 255), random.randint(0, 255)))
         segmentation_mask_img = Image.fromarray(segmentation_mask_array).convert("L")
@@ -382,7 +381,10 @@ elif (mode == "load"):
         max_xy = np.where(segmentation_mask_array == np.amax(segmentation_mask_array))
         print(max_xy)
         
-        ImageDraw.Draw(composite_img).text((max_xy[0], max_xy[1]), "DAMAGE", font=ImageFont.truetype("arial", 40))
+        max_x = np.min(max_xy[0])
+        max_y = np.min(max_xy[1])
+        
+        ImageDraw.Draw(composite_img).text((max_x, max_y), "DAMAGE", font=ImageFont.truetype("arial.ttf", 20))
         
         composite_img.save("composite.jpg")
         print("Output files saved in the current operating directory.")
