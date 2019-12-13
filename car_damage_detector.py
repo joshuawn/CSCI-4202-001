@@ -372,20 +372,45 @@ elif (mode == "load"):
 
         random.seed()
         # Generates a random color for a given mask
-        mask_color = Image.new('RGB', rescaled_img.size, (random.randint(0, 255), random.randint(0, 255), random.randint(0, 255)))
+        random_rgb = (random.randint(0, 255), random.randint(0, 255), random.randint(0, 255))
+        mask_color = Image.new('RGB', rescaled_img.size, random_rgb)
         segmentation_mask_img = Image.fromarray(segmentation_mask_array).convert("L")
         segmentation_mask_img.save("segmentation_mask.png")
         
         composite_img = Image.composite(mask_color, rescaled_img, segmentation_mask_img)
         
+        text_shadow_color = "black"
+    
+        # Image indices of maximum located damage in the mask
         max_xy = np.where(segmentation_mask_array == np.amax(segmentation_mask_array))
-        print(max_xy)
-        
         max_x = np.min(max_xy[0])
         max_y = np.min(max_xy[1])
         
-        ImageDraw.Draw(composite_img).text((max_x, max_y), "DAMAGE", font=ImageFont.truetype("arial.ttf", 20))
+        # Font size of 15 with an image of ~260 W is comfortable to read.
+        base_font_legibility_img_width = 260.0
+        optimal_font_scale = rescaled_img.size[0] / base_font_legibility_img_width
+        
+        font = ImageFont.truetype("arial.ttf", math.ceil(15*optimal_font_scale))
+        text = "DAMAGE -- max conf:\n" + str(segmentation_mask_array[max_x][max_y]/255.0)
+        
+        draw_coords = (10, 10)
+        
+        composite_draw = ImageDraw.Draw(composite_img)
+        
+        # Drawing shadow behind text to improve legibility
+        composite_draw.multiline_text((draw_coords[0]-1, draw_coords[1]), text, font=font, fill=text_shadow_color)
+        composite_draw.multiline_text((draw_coords[0]+1, draw_coords[1]), text, font=font, fill=text_shadow_color)
+        composite_draw.multiline_text((draw_coords[0], draw_coords[1]-1), text, font=font, fill=text_shadow_color)
+        composite_draw.multiline_text((draw_coords[0], draw_coords[1]+1), text, font=font, fill=text_shadow_color)
+        
+        composite_draw.multiline_text((draw_coords[0]-1, draw_coords[1]-1), text, font=font, fill=text_shadow_color)
+        composite_draw.multiline_text((draw_coords[0]+1, draw_coords[1]-1), text, font=font, fill=text_shadow_color)
+        composite_draw.multiline_text((draw_coords[0]-1, draw_coords[1]+1), text, font=font, fill=text_shadow_color)
+        composite_draw.multiline_text((draw_coords[0]+1, draw_coords[1]+1), text, font=font, fill=text_shadow_color)
+        
+        composite_draw.text(draw_coords, text, font=font, fill="white")
         
         composite_img.save("composite.jpg")
+        
         print("Output files saved in the current operating directory.")
         
